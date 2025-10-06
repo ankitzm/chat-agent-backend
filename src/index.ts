@@ -5,6 +5,9 @@ import { ChatMemory } from './memory';
 import { rootRoutes } from './routes/root';
 import { createStreamRoutes } from './routes/stream';
 import { createChatRoutes } from './routes/chat';
+import { initPineconeFromEnv } from './rag/pinecone';
+import { PineconeRetriever } from './rag/retriever';
+import { VoltChatAgent } from './agent/volt-agent';
 
 // Server setup
 const fastify = Fastify({
@@ -16,15 +19,20 @@ const fastify = Fastify({
   },
 });
 
-await fastify.register(cors, { origin: true });
+await fastify.register(cors, { origin: '*' });
 
 // Shared deps
 const memory = new ChatMemory();
 
+// Optional Pinecone retriever (RAG)
+const pineconeCfg = initPineconeFromEnv();
+const retriever = pineconeCfg ? new PineconeRetriever(pineconeCfg) : undefined;
+const agent = new VoltChatAgent({ model: process.env.OPENROUTER_MODEL ?? 'meta-llama/llama-3.1-8b-instruct:free' }, memory, retriever);
+
 // Register modular routes
 await fastify.register(rootRoutes);
-await fastify.register(createStreamRoutes({ memory }));
-await fastify.register(createChatRoutes({ memory }));
+await fastify.register(createStreamRoutes({ memory, retriever, agent } as any));
+await fastify.register(createChatRoutes({ memory, retriever, agent } as any));
 
 // Start server
 const PORT = Number(process.env.PORT ?? 3141);

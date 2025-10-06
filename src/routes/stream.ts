@@ -2,10 +2,13 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { DEFAULT_MODEL, isOpenRouterConfigured } from '../config';
 import { ChatMemory } from '../memory';
-import { orChatStream } from '../openrouter';
+import { PineconeRetriever } from '../rag/retriever';
+import { VoltChatAgent } from '../agent/volt-agent';
 
 export interface StreamDeps {
   memory: ChatMemory;
+  retriever?: PineconeRetriever;
+  agent: VoltChatAgent;
 }
 
 export function createStreamRoutes(deps: StreamDeps) {
@@ -37,23 +40,32 @@ export function createStreamRoutes(deps: StreamDeps) {
       deps.memory.appendUserMessage(sessionId, query);
       const history = deps.memory.getHistory(sessionId);
 
-      reply.headers({
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
-      });
-
-      // Flush headers
-      await reply.send('\u0000');
+      // Write SSE + CORS headers and keep connection open
+      reply.raw.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
+      reply.raw.setHeader('Connection', 'keep-alive');
+      reply.raw.setHeader('X-Accel-Buffering', 'no');
+      // Since we manually write the response, also set CORS here
+      reply.raw.setHeader('Access-Control-Allow-Origin', '*');
+      reply.raw.setHeader('Vary', 'Origin');
+      reply.raw.writeHead(200);
 
       try {
+        let contextSystem: string | undefined;
+        if (deps.retriever) {
+          try {
+            const docs = await deps.retriever.retrieve(query);
+            contextSystem = buildContextPrompt(docs);
+          } catch {}
+        }
         const messages = [
+          ...(contextSystem ? [{ role: 'system', content: contextSystem }] : []),
           ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
           ...history.map((m) => ({ role: m.role, content: m.content })),
         ];
 
         let assembled = '';
-        for await (const delta of orChatStream(messages as any, model ?? DEFAULT_MODEL)) {
+        for await (const delta of deps.agent.stream(sessionId, query)) {
           assembled += delta;
           reply.raw.write(`data: ${delta}\n\n`);
         }

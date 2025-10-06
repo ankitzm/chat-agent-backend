@@ -2,10 +2,13 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { DEFAULT_MODEL, isOpenRouterConfigured } from '../config';
 import { ChatMemory } from '../memory';
-import { orChatComplete } from '../openrouter';
+import { PineconeRetriever } from '../rag/retriever';
+import { VoltChatAgent } from '../agent/volt-agent';
 
 export interface ChatDeps {
   memory: ChatMemory;
+  retriever?: PineconeRetriever;
+  agent: VoltChatAgent;
 }
 
 export function createChatRoutes(deps: ChatDeps) {
@@ -38,11 +41,7 @@ export function createChatRoutes(deps: ChatDeps) {
       const history = deps.memory.getHistory(sessionId);
 
       try {
-        const messages = [
-          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-          ...history.map((m) => ({ role: m.role, content: m.content })),
-        ];
-        const text = await orChatComplete(messages as any, model ?? DEFAULT_MODEL);
+        const text = await deps.agent.generate(sessionId, message);
         deps.memory.appendAssistantMessage(sessionId, text);
         return { text, sessionId, timestamp: Date.now() };
       } catch (err: unknown) {
