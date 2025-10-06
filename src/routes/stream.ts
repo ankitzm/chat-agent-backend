@@ -1,8 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { streamText } from 'ai';
-import { openrouter, DEFAULT_MODEL, isOpenRouterConfigured } from '../config';
+import { DEFAULT_MODEL, isOpenRouterConfigured } from '../config';
 import { ChatMemory } from '../memory';
+import { orChatStream } from '../openrouter';
 
 export interface StreamDeps {
   memory: ChatMemory;
@@ -47,14 +47,13 @@ export function createStreamRoutes(deps: StreamDeps) {
       await reply.send('\u0000');
 
       try {
-        const result = await streamText({
-          model: openrouter(model ?? DEFAULT_MODEL) as any,
-          system: systemPrompt,
-          messages: history.map((m) => ({ role: m.role, content: m.content })),
-        });
+        const messages = [
+          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+          ...history.map((m) => ({ role: m.role, content: m.content })),
+        ];
 
         let assembled = '';
-        for await (const delta of result.textStream) {
+        for await (const delta of orChatStream(messages as any, model ?? DEFAULT_MODEL)) {
           assembled += delta;
           reply.raw.write(`data: ${delta}\n\n`);
         }

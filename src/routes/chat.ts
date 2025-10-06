@@ -1,8 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { generateText } from 'ai';
-import { openrouter, DEFAULT_MODEL, isOpenRouterConfigured } from '../config';
+import { DEFAULT_MODEL, isOpenRouterConfigured } from '../config';
 import { ChatMemory } from '../memory';
+import { orChatComplete } from '../openrouter';
 
 export interface ChatDeps {
   memory: ChatMemory;
@@ -38,13 +38,11 @@ export function createChatRoutes(deps: ChatDeps) {
       const history = deps.memory.getHistory(sessionId);
 
       try {
-        const result = await generateText({
-          model: openrouter(model ?? DEFAULT_MODEL) as any,
-          system: systemPrompt,
-          messages: history.map((m) => ({ role: m.role, content: m.content })),
-        });
-
-        const text = result.text;
+        const messages = [
+          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+          ...history.map((m) => ({ role: m.role, content: m.content })),
+        ];
+        const text = await orChatComplete(messages as any, model ?? DEFAULT_MODEL);
         deps.memory.appendAssistantMessage(sessionId, text);
         return { text, sessionId, timestamp: Date.now() };
       } catch (err: unknown) {
