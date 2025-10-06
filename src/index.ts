@@ -23,6 +23,8 @@ const memory = new ChatMemory();
 
 // Register modular routes
 await fastify.register(rootRoutes);
+await fastify.register(createStreamRoutes({ memory }));
+await fastify.register(createChatRoutes({ memory }));
 
 // Start server
 const PORT = Number(process.env.PORT ?? 3141);
