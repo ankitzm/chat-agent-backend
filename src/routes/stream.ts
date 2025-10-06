@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { DEFAULT_MODEL, isOpenRouterConfigured } from '../config';
 import { ChatMemory } from '../memory';
-import { PineconeRetriever } from '../rag/retriever';
+import { PineconeRetriever, buildContextPrompt } from '../rag/retriever';
 import { VoltChatAgent } from '../agent/volt-agent';
 
 export interface StreamDeps {
@@ -45,8 +45,10 @@ export function createStreamRoutes(deps: StreamDeps) {
       reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
       reply.raw.setHeader('Connection', 'keep-alive');
       reply.raw.setHeader('X-Accel-Buffering', 'no');
-      // Since we manually write the response, also set CORS here
-      reply.raw.setHeader('Access-Control-Allow-Origin', '*');
+      // Respect allowlist: if plugin approved the origin, Fastify will set Vary/ACA-Origin.
+      // Here we mirror it based on request header when writing raw.
+      const reqOrigin = (req.headers?.origin as string | undefined) ?? '*';
+      reply.raw.setHeader('Access-Control-Allow-Origin', reqOrigin);
       reply.raw.setHeader('Vary', 'Origin');
       reply.raw.writeHead(200);
 

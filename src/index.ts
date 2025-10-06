@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import { getCorsOptions } from './cors';
 import { ChatMemory } from './memory';
 import { rootRoutes } from './routes/root';
 import { createStreamRoutes } from './routes/stream';
@@ -19,7 +20,7 @@ const fastify = Fastify({
   },
 });
 
-await fastify.register(cors, { origin: '*' });
+await fastify.register(cors, getCorsOptions());
 
 // Shared deps
 const memory = new ChatMemory();
