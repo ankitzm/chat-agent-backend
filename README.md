@@ -1,290 +1,165 @@
-# Fastify VoltAgent Chat Server
+# Fastify Volt-like Chat Agent
 
-A clean, modular chat API built with [Fastify](https://fastify.dev) and [VoltAgent](https://voltagent.dev), powered by OpenRouter for LLM inference.
+A clean, modular chat API built with Fastify, Volt-like agent orchestration, and OpenRouter for LLM inference.
 
 ## Features
 
-- 🚀 **Fastify** - Fast and low overhead web framework
-- 🤖 **VoltAgent Integration** - AI agent framework for chat
-- 🔄 **Chat Context Management** - Per-session message history (in-memory, ready for Pinecone)
-- 🎯 **OpenRouter Support** - Access to multiple LLM models
-- 📝 **TypeScript** - Fully typed with Zod validation
-- 🧩 **Modular Architecture** - Clean separation of concerns
-- 🌊 **Streaming Support** - Real-time SSE streaming responses
+- 🚀 **Fastify**: Fast, low-overhead web framework
+- 🤖 **Volt-style Agent**: Simple agent wrapper with memory and optional RAG
+- 🔄 **Per-session Memory**: In-memory chat history (optional Pinecone RAG)
+- 🎯 **OpenRouter**: Access many LLM models via a single API
+- 📝 **TypeScript + Zod**: Fully typed with validation
+- 🧩 **Modular**: Clear separation of concerns
+- 🌊 **Streaming**: Real-time SSE responses
 
 ## Project Structure
 
 ```
 src/
-├── agents/          # VoltAgent agent definitions
-│   └── chat-agent.ts
-├── config/          # Environment configuration
-│   └── env.ts
-├── memory/          # Chat storage (in-memory, ready for Pinecone)
-│   └── chat-store.ts
-├── routes/          # Fastify route handlers
-│   └── chat.ts
-├── types/           # TypeScript type definitions
-│   └── chat.ts
-├── server.ts        # Fastify server setup
-└── index.ts         # Entry point
+├── agent/
+│   └── volt-agent.ts         # Agent wrapper (system + history + RAG)
+├── rag/
+│   ├── embeddings.ts         # Embedding via OpenRouter
+│   ├── pinecone.ts           # Pinecone client helpers
+│   └── retriever.ts          # Pinecone retriever + context prompt
+├── routes/
+│   ├── chat.ts               # POST /chat (non-streaming)
+│   ├── root.ts               # GET /, GET /health
+│   └── stream.ts             # GET /stream (SSE)
+├── config.ts                 # OpenRouter config helpers
+├── cors.ts                   # Allowlist-based CORS
+├── index.ts                  # Fastify server entry
+├── memory.ts                 # In-memory chat store
+├── openrouter.ts             # Chat + stream wrappers
+└── types.ts                  # Shared types
 ```
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1) Install dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Configure Environment
-
-Copy the example environment file:
+### 2) Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and add your OpenRouter API key:
+Edit `.env` and set `OPENROUTER_API_KEY` at minimum. Get a key from `https://openrouter.ai`.
 
-```env
-OPENROUTER_API_KEY=sk-or-v1-YOUR-ACTUAL-KEY-HERE
-```
-
-Get your OpenRouter API key from: https://openrouter.ai/
-
-### 3. Run the Server
+### 3) Run the server
 
 ```bash
 npm run dev
 ```
 
-The server will start at: http://localhost:3141
+Server defaults to `http://localhost:3141`.
 
 ## API Endpoints
 
-### Chat Endpoints
+### Utility
+- `GET /` → API info
+- `GET /health` → Health check
 
-#### Send Chat Message
-```bash
-POST /api/chat/text
-Content-Type: application/json
+### Chat (non-streaming)
+- `POST /chat`
 
+Request body:
+
+```json
 {
   "message": "Hello, how are you?",
-  "chatId": "optional-session-id",
-  "history": [
-    {"role": "user", "content": "Previous message", "timestamp": 1234567890}
-  ]
+  "sessionId": "optional-session-id",
+  "instructions": "optional system prompt",
+  "model": "optional model override"
 }
 ```
 
 Response:
+
 ```json
-{
-  "text": "I'm doing well, thank you!",
-  "chatId": "generated-or-provided-id",
-  "timestamp": 1234567890
-}
+{ "text": "…", "sessionId": "…", "timestamp": 1710000000000 }
 ```
 
-#### Stream Chat Response
-```bash
-POST /api/chat/stream
-Content-Type: application/json
+### Streaming (SSE)
+- `GET /stream?query=...&sessionId=...&instructions=...&model=...`
 
-{
-  "message": "Tell me a story",
-  "chatId": "optional-session-id"
-}
-```
-
-Response: Server-Sent Events (SSE) stream
-
-#### Get Chat History
-```bash
-GET /api/chat/history/:chatId
-```
-
-#### List All Sessions
-```bash
-GET /api/chat/sessions
-```
-
-#### Delete Session
-```bash
-DELETE /api/chat/session/:chatId
-```
-
-### Utility Endpoints
-
-- `GET /` - API information
-- `GET /health` - Health check
+Response: `text/event-stream` with incremental `data:` chunks and a terminal `event: done`.
 
 ## Example Usage
 
-### cURL Examples
+### cURL
 
 ```bash
-# Send a chat message
-curl -X POST http://localhost:3141/api/chat/text \
+# Send a chat message (non-streaming)
+curl -X POST http://localhost:3141/chat \
   -H "Content-Type: application/json" \
   -d '{
     "message": "What is TypeScript?"
   }'
 
-# Stream a response
-curl -X POST http://localhost:3141/api/chat/stream \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Count to 5 slowly"
-  }' \
-  --no-buffer
-
-# Get chat history
-curl http://localhost:3141/api/chat/history/YOUR_CHAT_ID
-
-# List all sessions
-curl http://localhost:3141/api/chat/sessions
+# Stream a response (SSE)
+curl -N "http://localhost:3141/stream?query=Tell%20me%20a%20story"
 ```
 
-### JavaScript/TypeScript Example
+### JavaScript/TypeScript
 
-```typescript
-// Send a message
-const response = await fetch('http://localhost:3141/api/chat/text', {
+```ts
+// Non-streaming
+const res = await fetch('http://localhost:3141/chat', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    message: 'Hello!',
-    history: []
-  })
+  body: JSON.stringify({ message: 'Hello!' })
 });
+const data = await res.json();
+console.log(data.text, data.sessionId);
 
-const data = await response.json();
-console.log(data.text); // AI response
-console.log(data.chatId); // Session ID for follow-up messages
-
-// Stream a response
-const streamResponse = await fetch('http://localhost:3141/api/chat/stream', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ message: 'Tell me a story' })
-});
-
-const reader = streamResponse.body.getReader();
+// Streaming (SSE)
+const resp = await fetch('http://localhost:3141/stream?query=Tell%20me%20a%20story');
+const reader = resp.body!.getReader();
 const decoder = new TextDecoder();
-
 while (true) {
   const { done, value } = await reader.read();
   if (done) break;
-  
   const chunk = decoder.decode(value);
-  console.log(chunk); // Stream chunks
+  console.log(chunk);
 }
 ```
 
-## Chat Context Management
+## Configuration
 
-The server maintains conversation history per `chatId`:
+Set via environment variables:
 
-```typescript
-// First message - creates new session
-const response1 = await chat({ message: "Remember the number 42" });
-const chatId = response1.chatId;
+Required:
+- `OPENROUTER_API_KEY`
 
-// Follow-up message - maintains context
-const response2 = await chat({
-  message: "What number did I just mention?",
-  chatId: chatId,
-  history: [
-    { role: "user", content: "Remember the number 42", timestamp: Date.now() },
-    { role: "assistant", content: "I'll remember 42", timestamp: Date.now() }
-  ]
-});
-```
-
-## OpenRouter Models
-
-You can use any model available on OpenRouter. Some popular options:
-
-- `meta-llama/llama-3.1-8b-instruct:free` (default, free)
-- `anthropic/claude-3-haiku`
-- `openai/gpt-4-turbo`
-- `google/gemini-pro`
-
-Change the model in `.env`:
-```env
-OPENROUTER_MODEL=anthropic/claude-3-haiku
-```
-
-See all models at: https://openrouter.ai/models
+Optional (sensible defaults):
+- `OPENROUTER_BASE_URL` (default `https://openrouter.ai/api/v1`)
+- `OPENROUTER_HTTP_REFERER` (default `http://localhost`)
+- `OPENROUTER_APP_TITLE` (default `hono-chat-agent`)
+- `OPENROUTER_MODEL` (default `meta-llama/llama-3.1-8b-instruct:free`)
+- `PORT` (default `3141`)
+- `HOST` (default `0.0.0.0`)
+- `CORS_ALLOWLIST` (comma-separated origins or `*`)
+- `EMBEDDINGS_MODEL` (default `openai/text-embedding-3-small`)
+- `PINECONE_API_KEY`, `PINECONE_INDEX`, `PINECONE_NAMESPACE` (enable RAG)
 
 ## Development
 
-### Scripts
-
 ```bash
 npm run dev         # Start development server with hot reload
-npm run build       # Compile TypeScript
+npm run build       # Compile TypeScript to ./dist
 npm run start       # Run compiled JavaScript
-npm run type-check  # Check TypeScript types
+npm run type-check  # Type-check only
 ```
 
-### Code Structure
+## Notes on RAG (Pinecone)
 
-- **KISS** - Simple, readable code
-- **YAGNI** - Only build what's needed
-- **DRY** - Reusable, modular components
-- **HAI** - Proper error handling and logging
-
-## Deployment
-
-### Build for Production
-
-```bash
-npm run build
-npm start
-```
-
-### Environment Variables for Production
-
-```env
-NODE_ENV=production
-OPENROUTER_API_KEY=your-production-key
-PORT=3141
-HOST=0.0.0.0
-```
-
-## Migration to Pinecone
-
-The current `ChatStore` is in-memory. To migrate to Pinecone:
-
-1. Install Pinecone SDK: `npm install @pinecone-database/pinecone`
-2. Create `src/memory/pinecone-store.ts` with same interface
-3. Swap implementation in `src/routes/chat.ts`
-4. Add `PINECONE_API_KEY` to `.env`
-
-The modular architecture makes this swap seamless!
-
-## Next Steps
-
-- [ ] Add authentication (API keys or JWT)
-- [ ] Implement rate limiting
-- [ ] Add Pinecone integration for persistent storage
-- [ ] Add custom tools for the agent
-- [ ] Deploy to production
-
-## Tech Stack
-
-- [Fastify](https://fastify.dev) - Fast web framework
-- [VoltAgent](https://voltagent.dev) - AI agent framework
-- [OpenRouter](https://openrouter.ai) - LLM routing and inference
-- [TypeScript](https://typescriptlang.org) - Type safety
-- [Zod](https://zod.dev) - Runtime validation
+When `PINECONE_API_KEY` and `PINECONE_INDEX` are set, the server will attempt to retrieve context via Pinecone using embeddings produced through OpenRouter.
 
 ## License
 
 MIT
-
