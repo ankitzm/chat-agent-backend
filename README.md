@@ -39,7 +39,7 @@ src/
 ### 1) Install dependencies
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### 2) Configure environment
@@ -53,7 +53,7 @@ Edit `.env` and set `OPENROUTER_API_KEY` at minimum. Get a key from `https://ope
 ### 3) Run the server
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 Server defaults to `http://localhost:3141`.
@@ -150,10 +150,10 @@ Optional (sensible defaults):
 ## Development
 
 ```bash
-npm run dev         # Start development server with hot reload
-npm run build       # Compile TypeScript to ./dist
-npm run start       # Run compiled JavaScript
-npm run type-check  # Type-check only
+pnpm dev         # Start development server with hot reload
+pnpm build       # Compile TypeScript to ./dist
+pnpm start       # Run compiled JavaScript
+pnpm type-check  # Type-check only
 ```
 
 ## Notes on RAG (Pinecone)
